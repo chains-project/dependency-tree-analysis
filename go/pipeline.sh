@@ -1,12 +1,19 @@
 #!/bin/bash
 
-## Parameters
-TOTAL=500
-METRIC='docker_downloads_count'
+## CLI
+TOTAL="$1"
+PAGE_SIZE="$2"
+METRIC="$3"
 
-
-## Constants
-PAGE_SIZE=100
+if [[ -z ${TOTAL} || -z ${PAGE_SIZE} || -z ${METRIC} ]]; then
+	echo 'USAGE:   ./pipeline.sh <TOTAL> <PAGE_SIZE> <METRIC>'
+	echo 'EXAMPLE: ./pipeline.sh 500 100 docker_downloads_count'
+	echo ''
+	echo ''
+	echo '- TOTAL = n * PAGE_SIZE'
+	echo '- METRIC in ["downloads", "dependent_repos_count", "docker_dependents_count", "docker_downloads_count"]'
+	exit 0
+fi
 
 
 ## Main
@@ -32,7 +39,6 @@ for ((page=1; page<=pages; page++)); do
 	packages="${packages}${tmp}"
 done
 
-	echo "${packages}"
 echo ''
 echo '== DETERMINING TRANSITIVE COUNT =='
 counts=''

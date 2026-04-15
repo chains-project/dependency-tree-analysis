@@ -1,0 +1,46 @@
+name: Analysis
+on:
+  workflow_dispatch: ~
+
+permissions: read-all
+
+jobs:
+  npm:
+    name: ${{ matrix.target }}
+    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target: go
+          - target: npm
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
+        with:
+          persist-credentials: false
+      - name: Environment
+        if: ${{ matrix.target == 'go' }}
+        run: |
+          echo 'Go'
+          go version
+      - name: Environment
+        if: ${{ matrix.target == 'npm' }}
+        run: |
+          echo 'Node.js'
+          node --version
+
+          echo 'npm'
+          npm --version
+      - name: Run analysis based on 'downloads'
+        working-directory: ${{ matrix.target }}
+        run: ./pipeline.sh 500 100 downloads
+      - name: Run analysis based on 'dependent_repos_count'
+        working-directory: ${{ matrix.target }}
+        run: ./pipeline.sh 500 100 dependent_repos_count
+      - name: Run analysis based on 'docker_dependents_count'
+        working-directory: ${{ matrix.target }}
+        run: ./pipeline.sh 500 100 docker_dependents_count
+      - name: Run analysis based on 'docker_downloads_count'
+        working-directory: ${{ matrix.target }}
+        run: ./pipeline.sh 500 100 docker_downloads_count
