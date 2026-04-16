@@ -1,0 +1,139 @@
+#!/bin/bash
+
+## CLI
+TOTAL="$1"
+PAGE_SIZE="$2"
+METRIC="$3"
+CLEAN="$4"
+
+if [[ -z ${TOTAL} || -z ${PAGE_SIZE} || -z ${METRIC} ]]; then
+	echo 'USAGE:   ./pipeline.sh <TOTAL> <PAGE_SIZE> <METRIC>'
+	echo 'EXAMPLE: ./pipeline.sh 500 100 docker_downloads_count'
+	echo ''
+	echo ''
+	echo '- TOTAL = n * PAGE_SIZE'
+	echo '- METRIC in ["downloads", "dependent_repos_count", "docker_dependents_count", "docker_downloads_count"]'
+	exit 0
+fi
+
+
+## Main
+echo "Evaluating dependency metrics of top ${TOTAL} Maven (Maven Central) packages, based on the metric '${METRIC}'"
+echo "Using page size ${PAGE_SIZE}"
+
+echo ''
+echo '== COLLECTING PACKAGE NAMES =='
+packages=''
+pages=$(( (TOTAL + PAGE_SIZE - 1) / PAGE_SIZE ))
+for ((page=1; page<=pages; page++)); do
+	echo "Fetching page ${page} ..."
+
+	response=$( \
+		curl -sX 'GET' \
+			"https://packages.ecosyste.ms/api/v1/registries/repo1.maven.org/package_names?page=${page}&per_page=${PAGE_SIZE}&sort=${METRIC}" \
+			-H 'accept: application/json' \
+	)
+
+	tmp=$(echo "${response}" | jq -r '.[]')
+	packages="${packages}${tmp}
+"
+done
+
+echo ''
+echo '== DETERMINING TRANSITIVE COUNT =='
+counts=''
+while IFS= read -r package; do
+	rm -rf tmp/
+	if [ "${CLEAN}" == 'clean' ]; then
+		rm -rf ~/.m2/repository
+	fi
+
+	mkdir tmp/
+	cd tmp/
+
+  echo "Evaluating '${package}' ..."
+
+	# Maven requires an explicit version in pom.xml; fetch it from the registry
+	encoded=$(jq -rn --arg p "${package}" '$p | @uri')
+	version=$(curl -s "https://packages.ecosyste.ms/api/v1/registries/repo1.maven.org/packages/${encoded}" \
+		| jq -r '.latest_release_number // .latest_stable_release_number // empty')
+	if [[ -z "${version}" ]]; then
+		echo '  ! package not found'
+		continue
+	fi
+
+	group_id=$(echo "${package}" | cut -d: -f1)
+	artifact_id=$(echo "${package}" | cut -d: -f2)
+
+	cat > pom.xml <<POMEOF
+<project>
+  <modelVersion>4.0.0</modelVersion>
+  <groupId>com.example</groupId>
+  <artifactId>analysis</artifactId>
+  <version>1.0</version>
+  <dependencies>
+    <dependency>
+      <groupId>${group_id}</groupId>
+      <artifactId>${artifact_id}</artifactId>
+      <version>${version}</version>
+    </dependency>
+  </dependencies>
+</project>
+POMEOF
+
+	mvn_stderr=$(mktemp)
+	timeout 300s mvn -B -q io.github.chains-project:maven-lockfile:5.15.0:generate -DincludeMavenPlugins=false >/dev/null 2>"${mvn_stderr}"
+	mvn_exit=$?
+	if [[ ${mvn_exit} -eq 124 ]]; then
+		echo '  ! timed out'
+		rm -f "${mvn_stderr}"
+		continue
+	elif [[ ${mvn_exit} -ne 0 ]]; then
+		echo "  ! maven failed: $(grep -m1 'ERROR\|Could not\|Failed' "${mvn_stderr}" || echo 'unknown error')"
+		rm -f "${mvn_stderr}"
+		continue
+	fi
+	rm -f "${mvn_stderr}"
+
+	transitive_count=$(jq '
+		[
+		  .dependencies[]?,
+		  (.. | .children?[]?)
+		] |
+		map(select(has("groupId") and (.scope? != "test"))) |
+		unique_by(.groupId + ":" + .artifactId) |
+		length
+	' lockfile.json)
+	# subtract 1 for the direct dependency itself
+	transitive_count=$((transitive_count - 1))
+	if [[ "${transitive_count}" -lt 0 ]]; then
+		echo '  ! dependency count could not be determined'
+		echo ''
+		echo '=== DEBUG START ==='
+		cat lockfile.json
+		echo '===  DEBUG END  ==='
+		continue
+	fi
+
+	echo "  got ${version}"
+	echo "  has ${transitive_count} dependencies"
+
+	counts="${counts}${transitive_count}
+"
+
+	cd ..
+done <<<"$(printf "%s\n" "$packages" | awk 'NF')"
+
+echo ''
+echo '== COMPUTING STATS =='
+sum=0
+count=0
+while IFS= read -r n; do
+	echo "$n"
+  sum=$((sum + n))
+  count=$((count + 1))
+done <<<"$(printf "%s\n" "$counts" | awk 'NF')"
+
+echo ''
+echo '== RESULTS =='
+echo "avg: $(echo "scale=2; ${sum} / ${count}" | bc) (=${sum}/${count})"

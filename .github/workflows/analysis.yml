@@ -22,6 +22,7 @@ jobs:
       matrix:
         target:
           - go
+          - mvn
           - npm
           - rust
         metric:
@@ -49,6 +50,12 @@ jobs:
 
           echo 'npm'
           npm --version
+      - name: Maven environment
+        if: ${{ matrix.target == 'mvn' }}
+        uses: actions/setup-java@f2beeb24e141e01a676f977032f5a29d81c9e27e # v5.1.0
+        with:
+          java-version: '17'
+          distribution: 'temurin'
       - name: Rust environment
         if: ${{ matrix.target == 'rust' }}
         run: |
