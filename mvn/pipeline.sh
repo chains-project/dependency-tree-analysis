@@ -41,7 +41,8 @@ done
 
 echo ''
 echo '== DETERMINING TRANSITIVE COUNT =='
-counts=''
+counts_transitive=''
+counts_peer=''
 while IFS= read -r package; do
 	rm -rf tmp/
 	if [ "${CLEAN}" == 'clean' ]; then
@@ -115,10 +116,32 @@ POMEOF
 		continue
 	fi
 
+	group_path=$(echo "${group_id}" | tr '.' '/')
+	pom_file="${HOME}/.m2/repository/${group_path}/${artifact_id}/${version}/${artifact_id}-${version}.pom"
+	peer_count=0
+	if [[ -f "${pom_file}" ]]; then
+		peer_count=$(python3 -c "
+import xml.etree.ElementTree as ET
+tree = ET.parse('${pom_file}')
+root = tree.getroot()
+tag = root.tag
+ns = tag.split('}')[0] + '}' if tag.startswith('{') else ''
+count = 0
+for dep in root.findall(f'.//{ns}dependencies/{ns}dependency'):
+    scope = dep.find(f'{ns}scope')
+    if scope is not None and scope.text == 'provided':
+        count += 1
+print(count)
+" 2>/dev/null || echo 0)
+	fi
+
 	echo "  got ${version}"
 	echo "  has ${transitive_count} dependencies"
+	echo "  has ${peer_count} peers"
 
-	counts="${counts}${transitive_count}
+	counts_transitive="${counts_transitive}${transitive_count}
+"
+	counts_peer="${counts_peer}${peer_count}
 "
 
 	cd ..
@@ -126,14 +149,23 @@ done <<<"$(printf "%s\n" "$packages" | awk 'NF')"
 
 echo ''
 echo '== COMPUTING STATS =='
-sum=0
-count=0
+transitive_count=0
+transitive_sum=0
 while IFS= read -r n; do
-	echo "$n"
-  sum=$((sum + n))
-  count=$((count + 1))
-done <<<"$(printf "%s\n" "$counts" | awk 'NF')"
+	echo "tran: $n"
+  transitive_count=$((transitive_count + 1))
+  transitive_sum=$((transitive_sum + n))
+done <<<"$(printf "%s\n" "$counts_transitive" | awk 'NF')"
+
+peer_count=0
+peer_sum=0
+while IFS= read -r n; do
+	echo "peer: $n"
+  peer_count=$((peer_count + 1))
+  peer_sum=$((peer_sum + n))
+done <<<"$(printf "%s\n" "$counts_peer" | awk 'NF')"
 
 echo ''
 echo '== RESULTS =='
-echo "avg: $(echo "scale=2; ${sum} / ${count}" | bc) (=${sum}/${count})"
+echo "avg # deps : $(echo "scale=2; ${transitive_sum} / ${transitive_count}" | bc) (=${transitive_sum}/${transitive_count})"
+echo "avg # peers: $(echo "scale=2; ${peer_sum} / ${peer_count}" | bc) (=${peer_sum}/${peer_count})"
