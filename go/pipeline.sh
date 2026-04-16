@@ -4,6 +4,7 @@
 TOTAL="$1"
 PAGE_SIZE="$2"
 METRIC="$3"
+CLEAN="$4"
 
 if [[ -z ${TOTAL} || -z ${PAGE_SIZE} || -z ${METRIC} ]]; then
 	echo 'USAGE:   ./pipeline.sh <TOTAL> <PAGE_SIZE> <METRIC>'
@@ -42,8 +43,11 @@ echo '== DETERMINING TRANSITIVE COUNT =='
 counts=''
 while IFS= read -r package; do
 	rm -rf tmp/
-	mkdir tmp/
+	if [ "${CLEAN}" == 'clean' ]; then
+		go clean -modcache
+	fi
 
+	mkdir tmp/
 	cd tmp/
 
   echo "Evaluating '${package}' ..."

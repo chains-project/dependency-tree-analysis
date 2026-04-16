@@ -59,7 +59,7 @@ jobs:
           cargo --version
       - name: Run analysis
         working-directory: ${{ matrix.target }}
-        run: ./pipeline.sh "${TOTAL}" "${PAGE_SIZE}" "${METRIC}" | tee "../${LOG_FILE}"
+        run: ./pipeline.sh "${TOTAL}" "${PAGE_SIZE}" "${METRIC}" 'clean' | tee "../${LOG_FILE}"
         env:
           TOTAL: ${{ inputs.total }}
           PAGE_SIZE: ${{ inputs.page_size}}
