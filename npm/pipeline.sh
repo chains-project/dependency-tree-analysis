@@ -35,7 +35,8 @@ for ((page=1; page<=pages; page++)); do
 	)
 
 	tmp=$(echo "${response}" | jq -r '.[]')
-	packages="${packages}${tmp}"
+	packages="${packages}${tmp}
+"
 done
 
 echo ''
