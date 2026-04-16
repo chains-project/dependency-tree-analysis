@@ -46,7 +46,7 @@ jobs:
           printf -v json '"%s",' "${targets[@]}"
           echo "value=[${json%,}]" >> "$GITHUB_OUTPUT"
 
-  npm:
+  run-analysis:
     needs: generate-matrix
     name: ${{ matrix.target }}, ${{ matrix.metric }}
     runs-on: ubuntu-24.04
