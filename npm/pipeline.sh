@@ -4,7 +4,6 @@
 TOTAL="$1"
 PAGE_SIZE="$2"
 METRIC="$3"
-CLEAN="$4"
 
 if [[ -z ${TOTAL} || -z ${PAGE_SIZE} || -z ${METRIC} ]]; then
 	echo 'USAGE:   ./pipeline.sh <TOTAL> <PAGE_SIZE> <METRIC>'
@@ -45,10 +44,6 @@ counts_transitive=''
 counts_peer=''
 while IFS= read -r package; do
 	rm -rf tmp/
-	if [ "${CLEAN}" == 'clean' ]; then
-		npm cache clean --force >/dev/null 2>&1
-	fi
-
 	mkdir tmp/
 	cd tmp/
 
