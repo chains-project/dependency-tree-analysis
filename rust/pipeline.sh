@@ -97,4 +97,4 @@ done <<<"$(printf "%s\n" "$counts" | awk 'NF')"
 
 echo ''
 echo '== RESULTS =='
-echo "avg: $(echo "scale=2; ${sum} / ${count}" | bc) (=${sum}/${count})"
+echo "avg # deps : $(echo "scale=2; ${sum} / ${count}" | bc) (=${sum}/${count})"

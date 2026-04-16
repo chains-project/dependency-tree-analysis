@@ -135,11 +135,7 @@ jobs:
               for target in "${targets[@]}"; do
                 log="logs/${target}-${metric}-${{ inputs.total }}.log"
                 if [[ -f "${log}" ]]; then
-                  if [[ "${target}" == 'npm' || "${target}" == 'mvn' ]]; then
-                    value=$(grep '^avg # deps' "${log}" | head -1 | sed 's/^avg # deps : //')
-                  else
-                    value=$(grep '^avg:' "${log}" | head -1 | sed 's/^avg: //')
-                  fi
+                  value=$(grep '^avg # deps' "${log}" | head -1 | sed 's/^avg # deps : //')
                   row="${row} ${value} |"
                 else
                   row="${row} - |"
