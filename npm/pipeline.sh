@@ -40,53 +40,46 @@ done
 
 echo ''
 echo '== DETERMINING RELATIONS =='
-counts_transitive=''
-counts_peer=''
-while IFS= read -r package; do
-	rm -rf tmp/
-	mkdir tmp/
-	cd tmp/
 
-  echo "Evaluating '${package}' ..."
+_process_package() {
+	package="$1"
+	workdir=$(mktemp -d)
+	trap "rm -rf '${workdir}'" EXIT
+
+	cd "${workdir}" || return
+
+	echo "Evaluating '${package}' ..." >&2
 	npm init -y >/dev/null 2>&1
 	if ! timeout 30s npm install "${package}" --ignore-scripts=false --allow-git=none --audit=false --save-exact >/dev/null 2>&1; then
-		echo '  ! package not resolved'
-		cd ..
-		continue
+		echo '  ! package not resolved' >&2
+		return
 	fi
 
 	tmp=$(npm ls --all 2>/dev/null)
 
 	version=$(echo "$tmp" | awk 'NR == 2' | awk -F'@' '{print $2}')
 	if [[ -z "${version}" ]]; then
-		echo '  ! package not found'
-		cd ..
-		continue
+		echo '  ! package not found' >&2
+		return
 	fi
 
 	transitive_count=$(echo "${tmp}" | grep -E '^ ' | grep -vE 'deduped$' | grep -v ' UNMET ' | wc -l)
-	if [[ -z "${transitive_count}" ]]; then
-		echo '  ! dependency count could not be determined'
-		echo ''
-		echo '=== DEBUG START ==='
-		echo "${tmp}"
-		echo '===  DEBUG END  ==='
-		continue
-	fi
 
 	peer_count=$(cat "node_modules/${package}/package.json" | jq '.peerDependencies // {} | keys | length')
 
-	echo "  got ${version}"
-	echo "  has ${transitive_count} dependencies"
-	echo "  has ${peer_count} peers"
+	echo "  got ${version}" >&2
+	echo "  has ${transitive_count} dependencies" >&2
+	echo "  has ${peer_count} peers" >&2
 
-	counts_transitive="${counts_transitive}${transitive_count}
-"
-	counts_peer="${counts_peer}${peer_count}
-"
+	echo "${transitive_count}:${peer_count}"
+}
 
-	cd ..
-done <<<"${packages}"
+export -f _process_package
+
+raw=$(printf "%s\n" "${packages}" | awk 'NF' | parallel --will-cite -j 8 _process_package)
+
+counts_transitive=$(echo "${raw}" | awk -F: 'NF {print $1}')
+counts_peer=$(echo "${raw}" | awk -F: 'NF {print $2}')
 
 echo ''
 echo '== COMPUTING STATS =='

@@ -40,49 +40,45 @@ done
 
 echo ''
 echo '== DETERMINING TRANSITIVE COUNT =='
-counts=''
-while IFS= read -r package; do
-	rm -rf tmp/
-	# Clean modcache each iteration to avoid disk exhaustion; acceptable here because Go dependency resolution is fast
-	go clean -modcache >/dev/null 2>&1
-	mkdir tmp/
-	cd tmp/
 
-  echo "Evaluating '${package}' ..."
+_process_package() {
+	package="$1"
+	workdir=$(mktemp -d)
+	gopath=$(mktemp -d)
+	# Each job gets its own GOPATH so modcaches don't conflict and are cleaned up on exit
+	trap "rm -rf '${workdir}' '${gopath}'" EXIT
+
+	export GOPATH="${gopath}"
+	export GOMODCACHE="${gopath}/pkg/mod"
+
+	cd "${workdir}" || return
+
+	echo "Evaluating '${package}' ..." >&2
 	go mod init example.com/m >/dev/null 2>&1
 	if ! timeout 30s go get "${package}" >/dev/null 2>&1; then
-		echo '  ! module not resolved'
-		cd ..
-		continue
+		echo '  ! module not resolved' >&2
+		return
 	fi
 
 	tmp=$(go list -m all 2>/dev/null)
 
 	version=$(echo "$tmp" | awk 'NR == 2' | awk '{print $2}')
 	if [[ -z "${version}" ]]; then
-		echo '  ! module not found'
-		cd ..
-		continue
+		echo '  ! module not found' >&2
+		return
 	fi
 
 	transitive_count=$(echo "${tmp}" | awk 'NR > 2' | wc -l)
-	if [[ -z "${transitive_count}" ]]; then
-		echo '  ! dependency count could not be determined'
-		echo ''
-		echo '=== DEBUG START ==='
-		echo "${tmp}"
-		echo '===  DEBUG END  ==='
-		exit 100
-	fi
 
-	echo "  got ${version}"
-	echo "  has ${transitive_count} dependencies"
+	echo "  got ${version}" >&2
+	echo "  has ${transitive_count} dependencies" >&2
 
-	counts="${counts}${transitive_count}
-"
+	echo "${transitive_count}"
+}
 
-	cd ..
-done <<<"${packages}"
+export -f _process_package
+
+counts=$(printf "%s\n" "${packages}" | awk 'NF' | parallel --will-cite -j 8 _process_package)
 
 echo ''
 echo '== COMPUTING STATS =='

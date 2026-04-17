@@ -40,47 +40,40 @@ done
 
 echo ''
 echo '== DETERMINING TRANSITIVE COUNT =='
-counts=''
-while IFS= read -r package; do
-	rm -rf tmp/
-	mkdir tmp/
-	cd tmp/
 
-  echo "Evaluating '${package}' ..."
+_process_package() {
+	package="$1"
+	workdir=$(mktemp -d)
+	trap "rm -rf '${workdir}'" EXIT
+
+	cd "${workdir}" || return
+
+	echo "Evaluating '${package}' ..." >&2
 	cargo init >/dev/null 2>&1
 	if ! timeout 30s cargo add "${package}" >/dev/null 2>&1; then
-		echo '  ! crate not resolved'
-		cd ..
-		continue
+		echo '  ! crate not resolved' >&2
+		return
 	fi
 
 	tmp=$(cargo tree 2>/dev/null)
 
 	version=$(echo "$tmp" | awk 'NR == 2' | awk '{print $3}')
 	if [[ -z "${version}" ]]; then
-		echo '  ! crate not found'
-		cd ..
-		continue
+		echo '  ! crate not found' >&2
+		return
 	fi
 
 	transitive_count=$(echo "${tmp}" | grep -E '^ ' | wc -l)
-	if [[ -z "${transitive_count}" ]]; then
-		echo '  ! dependency count could not be determined'
-		echo ''
-		echo '=== DEBUG START ==='
-		echo "${tmp}"
-		echo '===  DEBUG END  ==='
-		continue
-	fi
 
-	echo "  got ${version}"
-	echo "  has ${transitive_count} dependencies"
+	echo "  got ${version}" >&2
+	echo "  has ${transitive_count} dependencies" >&2
 
-	counts="${counts}${transitive_count}
-"
+	echo "${transitive_count}"
+}
 
-	cd ..
-done <<<"${packages}"
+export -f _process_package
+
+counts=$(printf "%s\n" "${packages}" | awk 'NF' | parallel --will-cite -j 8 _process_package)
 
 echo ''
 echo '== COMPUTING STATS =='
