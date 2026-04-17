@@ -41,6 +41,11 @@ done
 echo ''
 echo '== DETERMINING TRANSITIVE COUNT =='
 
+echo 'Warming Cargo registry ...'
+_warmdir=$(mktemp -d)
+(cd "${_warmdir}" && cargo init >/dev/null 2>&1 && cargo add serde >/dev/null 2>&1)
+rm -rf "${_warmdir}"
+
 _process_package() {
 	package="$1"
 	workdir=$(mktemp -d)
@@ -80,11 +85,16 @@ echo '== COMPUTING STATS =='
 sum=0
 count=0
 while IFS= read -r n; do
+	[[ -z "$n" ]] && continue
 	echo "$n"
-  sum=$((sum + n))
-  count=$((count + 1))
+	sum=$((sum + n))
+	count=$((count + 1))
 done <<<"$(printf "%s\n" "$counts" | awk 'NF')"
 
 echo ''
 echo '== RESULTS =='
-echo "avg # deps : $(echo "scale=2; ${sum} / ${count}" | bc) (=${sum}/${count})"
+if [[ "${count}" -eq 0 ]]; then
+	echo "avg # deps : N/A (no packages resolved)"
+else
+	echo "avg # deps : $(echo "scale=2; ${sum} / ${count}" | bc) (=${sum}/${count})"
+fi
