@@ -34,6 +34,10 @@ for ((page=1; page<=pages; page++)); do
 	)
 
 	tmp=$(echo "${response}" | jq -r '.[]')
+	if [[ -z "${tmp}" ]]; then
+		echo "Page ${page} returned empty results, stopping early."
+		break
+	fi
 	packages="${packages}${tmp}
 "
 done
@@ -46,7 +50,7 @@ _process_package() {
 	workdir=$(mktemp -d)
 	gopath=$(mktemp -d)
 	# Each job gets its own GOPATH so modcaches don't conflict and are cleaned up on exit
-	trap "rm -rf '${workdir}' '${gopath}'" EXIT
+	trap "chmod -R u+w '${gopath}' 2>/dev/null; rm -rf '${workdir}' '${gopath}'" EXIT
 
 	export GOPATH="${gopath}"
 	export GOMODCACHE="${gopath}/pkg/mod"
