@@ -40,61 +40,58 @@ done
 
 echo ''
 echo '== DETERMINING TRANSITIVE COUNT =='
+counts=''
+while IFS= read -r package; do
+	rm -rf tmp/
+	mkdir tmp/
+	cd tmp/
 
-echo 'Warming Cargo registry ...'
-_warmdir=$(mktemp -d)
-(cd "${_warmdir}" && cargo init >/dev/null 2>&1 && cargo add serde >/dev/null 2>&1)
-rm -rf "${_warmdir}"
-
-_process_package() {
-	package="$1"
-	workdir=$(mktemp -d)
-	trap "rm -rf '${workdir}'" EXIT
-
-	cd "${workdir}" || return
-
-	echo "Evaluating '${package}' ..." >&2
+  echo "Evaluating '${package}' ..."
 	cargo init >/dev/null 2>&1
 	if ! timeout 30s cargo add "${package}" >/dev/null 2>&1; then
-		echo '  ! crate not resolved' >&2
-		return
+		echo '  ! crate not resolved'
+		cd ..
+		continue
 	fi
 
 	tmp=$(cargo tree 2>/dev/null)
 
 	version=$(echo "$tmp" | awk 'NR == 2' | awk '{print $3}')
 	if [[ -z "${version}" ]]; then
-		echo '  ! crate not found' >&2
-		return
+		echo '  ! crate not found'
+		cd ..
+		continue
 	fi
 
 	transitive_count=$(echo "${tmp}" | grep -E '^ ' | wc -l)
+	if [[ -z "${transitive_count}" ]]; then
+		echo '  ! dependency count could not be determined'
+		echo ''
+		echo '=== DEBUG START ==='
+		echo "${tmp}"
+		echo '===  DEBUG END  ==='
+		continue
+	fi
 
-	echo "  got ${version}" >&2
-	echo "  has ${transitive_count} dependencies" >&2
+	echo "  got ${version}"
+	echo "  has ${transitive_count} dependencies"
 
-	echo "${transitive_count}"
-}
+	counts="${counts}${transitive_count}
+"
 
-export -f _process_package
-
-counts=$(printf "%s\n" "${packages}" | awk 'NF' | parallel --will-cite -j 8 _process_package)
+	cd ..
+done <<<"${packages}"
 
 echo ''
 echo '== COMPUTING STATS =='
 sum=0
 count=0
 while IFS= read -r n; do
-	[[ -z "$n" ]] && continue
 	echo "$n"
-	sum=$((sum + n))
-	count=$((count + 1))
+  sum=$((sum + n))
+  count=$((count + 1))
 done <<<"$(printf "%s\n" "$counts" | awk 'NF')"
 
 echo ''
 echo '== RESULTS =='
-if [[ "${count}" -eq 0 ]]; then
-	echo "avg # deps : N/A (no packages resolved)"
-else
-	echo "avg # deps : $(echo "scale=2; ${sum} / ${count}" | bc) (=${sum}/${count})"
-fi
+echo "avg # deps : $(echo "scale=2; ${sum} / ${count}" | bc) (=${sum}/${count})"

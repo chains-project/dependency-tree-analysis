@@ -34,55 +34,55 @@ for ((page=1; page<=pages; page++)); do
 	)
 
 	tmp=$(echo "${response}" | jq -r '.[]')
-	if [[ -z "${tmp}" ]]; then
-		echo "Page ${page} returned empty results, stopping early."
-		break
-	fi
 	packages="${packages}${tmp}
 "
 done
 
 echo ''
 echo '== DETERMINING TRANSITIVE COUNT =='
+counts=''
+while IFS= read -r package; do
+	rm -rf tmp/
+	# Clean modcache each iteration to avoid disk exhaustion; acceptable here because Go dependency resolution is fast
+	go clean -modcache >/dev/null 2>&1
+	mkdir tmp/
+	cd tmp/
 
-_process_package() {
-	package="$1"
-	workdir=$(mktemp -d)
-	gopath=$(mktemp -d)
-	# Each job gets its own GOPATH so modcaches don't conflict and are cleaned up on exit
-	trap "chmod -R u+w '${gopath}' 2>/dev/null; rm -rf '${workdir}' '${gopath}'" EXIT
-
-	export GOPATH="${gopath}"
-	export GOMODCACHE="${gopath}/pkg/mod"
-
-	cd "${workdir}" || return
-
-	echo "Evaluating '${package}' ..." >&2
+  echo "Evaluating '${package}' ..."
 	go mod init example.com/m >/dev/null 2>&1
 	if ! timeout 30s go get "${package}" >/dev/null 2>&1; then
-		echo '  ! module not resolved' >&2
-		return
+		echo '  ! module not resolved'
+		cd ..
+		continue
 	fi
 
 	tmp=$(go list -m all 2>/dev/null)
 
 	version=$(echo "$tmp" | awk 'NR == 2' | awk '{print $2}')
 	if [[ -z "${version}" ]]; then
-		echo '  ! module not found' >&2
-		return
+		echo '  ! module not found'
+		cd ..
+		continue
 	fi
 
 	transitive_count=$(echo "${tmp}" | awk 'NR > 2' | wc -l)
+	if [[ -z "${transitive_count}" ]]; then
+		echo '  ! dependency count could not be determined'
+		echo ''
+		echo '=== DEBUG START ==='
+		echo "${tmp}"
+		echo '===  DEBUG END  ==='
+		exit 100
+	fi
 
-	echo "  got ${version}" >&2
-	echo "  has ${transitive_count} dependencies" >&2
+	echo "  got ${version}"
+	echo "  has ${transitive_count} dependencies"
 
-	echo "${transitive_count}"
-}
+	counts="${counts}${transitive_count}
+"
 
-export -f _process_package
-
-counts=$(printf "%s\n" "${packages}" | awk 'NF' | parallel --will-cite -j 8 _process_package)
+	cd ..
+done <<<"${packages}"
 
 echo ''
 echo '== COMPUTING STATS =='

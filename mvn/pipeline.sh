@@ -44,23 +44,23 @@ done
 
 echo ''
 echo '== DETERMINING TRANSITIVE COUNT =='
+counts_transitive=''
+counts_peer=''
+while IFS= read -r package; do
+	rm -rf tmp/
+	mkdir tmp/
+	cd tmp/
 
-_process_package() {
-	package="$1"
-	workdir=$(mktemp -d)
-	trap "rm -rf '${workdir}'" EXIT
-
-	cd "${workdir}" || return
-
-	echo "Evaluating '${package}' ..." >&2
+  echo "Evaluating '${package}' ..."
 
 	# Maven requires an explicit version in pom.xml; fetch it from the registry
 	encoded=$(jq -rn --arg p "${package}" '$p | @uri')
 	version=$(curl -s "https://packages.ecosyste.ms/api/v1/registries/repo1.maven.org/packages/${encoded}" \
 		| jq -r '.latest_release_number // .latest_stable_release_number // empty')
 	if [[ -z "${version}" ]]; then
-		echo '  ! package not found' >&2
-		return
+		echo '  ! package not found'
+		cd ..
+		continue
 	fi
 
 	group_id=$(echo "${package}" | cut -d: -f1)
@@ -86,13 +86,15 @@ POMEOF
 	timeout 60s mvn -B -q io.github.chains-project:maven-lockfile:5.15.0:generate -DincludeMavenPlugins=false >/dev/null 2>"${mvn_stderr}"
 	mvn_exit=$?
 	if [[ ${mvn_exit} -eq 124 ]]; then
-		echo '  ! timed out' >&2
+		echo '  ! timed out'
 		rm -f "${mvn_stderr}"
-		return
+		cd ..
+		continue
 	elif [[ ${mvn_exit} -ne 0 ]]; then
-		echo "  ! maven failed: $(grep -m1 'ERROR\|Could not\|Failed' "${mvn_stderr}" || echo 'unknown error')" >&2
+		echo "  ! maven failed: $(grep -m1 'ERROR\|Could not\|Failed' "${mvn_stderr}" || echo 'unknown error')"
 		rm -f "${mvn_stderr}"
-		return
+		cd ..
+		continue
 	fi
 	rm -f "${mvn_stderr}"
 
@@ -108,8 +110,13 @@ POMEOF
 	# subtract 1 for the direct dependency itself
 	transitive_count=$((transitive_count - 1))
 	if [[ "${transitive_count}" -lt 0 ]]; then
-		echo '  ! dependency count could not be determined' >&2
-		return
+		echo '  ! dependency count could not be determined'
+		echo ''
+		echo '=== DEBUG START ==='
+		cat lockfile.json
+		echo '===  DEBUG END  ==='
+		cd ..
+		continue
 	fi
 
 	group_path=$(echo "${group_id}" | tr '.' '/')
@@ -131,19 +138,17 @@ print(count)
 " 2>/dev/null || echo 0)
 	fi
 
-	echo "  got ${version}" >&2
-	echo "  has ${transitive_count} dependencies" >&2
-	echo "  has ${peer_count} peers" >&2
+	echo "  got ${version}"
+	echo "  has ${transitive_count} dependencies"
+	echo "  has ${peer_count} peers"
 
-	echo "${transitive_count}:${peer_count}"
-}
+	counts_transitive="${counts_transitive}${transitive_count}
+"
+	counts_peer="${counts_peer}${peer_count}
+"
 
-export -f _process_package
-
-raw=$(printf "%s\n" "${packages}" | awk 'NF' | parallel --will-cite -j 8 _process_package)
-
-counts_transitive=$(echo "${raw}" | awk -F: 'NF {print $1}')
-counts_peer=$(echo "${raw}" | awk -F: 'NF {print $2}')
+	cd ..
+done <<<"$(printf "%s\n" "$packages" | awk 'NF')"
 
 echo ''
 echo '== COMPUTING STATS =='
