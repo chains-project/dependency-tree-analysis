@@ -27,13 +27,14 @@ pages=$(( (TOTAL + PAGE_SIZE - 1) / PAGE_SIZE ))
 for ((page=1; page<=pages; page++)); do
 	echo "Fetching page ${page} ..."
 
-	response=$( \
-		curl -sX 'GET' \
-			"https://packages.ecosyste.ms/api/v1/registries/crates.io/package_names?page=${page}&per_page=${PAGE_SIZE}&sort=${METRIC}" \
-			-H 'accept: application/json' \
-	)
+	url="https://packages.ecosyste.ms/api/v1/registries/crates.io/package_names?page=${page}&per_page=${PAGE_SIZE}&sort=${METRIC}"
+	response=$(curl -sX 'GET' "${url}" -H 'accept: application/json')
 
-	tmp=$(echo "${response}" | jq -r '.[]')
+	if ! tmp=$(echo "${response}" | jq -r '.[]' 2>/dev/null); then
+		echo "  ! jq parse error on: ${url}"
+		echo "  ! response: ${response}" | head -c 200
+		continue
+	fi
 	packages="${packages}${tmp}
 "
 done
