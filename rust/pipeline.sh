@@ -56,11 +56,14 @@ while IFS= read -r package; do
 
   echo "Evaluating '${package}' ..."
 	cargo init >/dev/null 2>&1
-	if ! timeout 30s cargo add "${package}" >/dev/null 2>&1; then
-		echo '  ! crate not resolved'
+	cargo_stderr=$(mktemp)
+	if ! timeout 30s cargo add "${package}" >/dev/null 2>"${cargo_stderr}"; then
+		echo "  ! crate not resolved: $(grep -m1 'error\|warning\|timed out' "${cargo_stderr}" || head -1 "${cargo_stderr}")"
+		rm -f "${cargo_stderr}"
 		cd ..
 		continue
 	fi
+	rm -f "${cargo_stderr}"
 
 	tmp=$(cargo tree 2>/dev/null)
 
