@@ -125,7 +125,7 @@ fi
 
 TIMESTAMP="$(date +%Y%m%d-%H%M%S)"
 LOGS_DIR="${LOGS_DIR:-${ROOT_DIR}/logs/${TIMESTAMP}-${TOTAL}}"
-WORKSPACES_DIR="${LOGS_DIR}/workspaces"
+WORKSPACES_DIR="${ROOT_DIR}/logs/workspaces"
 mkdir -p "${LOGS_DIR}"
 mkdir -p "${WORKSPACES_DIR}"
 
@@ -232,7 +232,6 @@ run_job() {
   fi
 
   echo "[start] ${target}/${metric}"
-  rm -rf "${workspace_dir}"
   mkdir -p "${workspace_dir}"
   cp -R "${ROOT_DIR}/${target}/." "${workspace_dir}/"
   (
