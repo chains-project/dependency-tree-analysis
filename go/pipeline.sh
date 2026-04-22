@@ -56,7 +56,7 @@ while IFS= read -r package; do
 
   echo "Evaluating '${package}' ..."
 	go mod init example.com/m >/dev/null 2>&1
-	if ! timeout 30s go get "${package}" >/dev/null 2>&1; then
+	if ! timeout 300s go get "${package}" >/dev/null 2>&1; then
 		echo '  ! module not resolved'
 		cd ..
 		continue

@@ -82,7 +82,7 @@ while IFS= read -r package; do
 POMEOF
 
 	mvn_stderr=$(mktemp)
-	timeout 60s mvn -B -q -Dmaven.repo.local="${HOME}/.m2/repository" org.apache.maven.plugins:maven-dependency-plugin:3.10.0:tree -DoutputType=json -DoutputFile=dependencies.json >/dev/null 2>"${mvn_stderr}"
+	timeout 300s mvn -B -q -Dmaven.repo.local="${HOME}/.m2/repository" org.apache.maven.plugins:maven-dependency-plugin:3.10.0:tree -DoutputType=json -DoutputFile=dependencies.json >/dev/null 2>"${mvn_stderr}"
 	mvn_exit=$?
 	if [[ ${mvn_exit} -eq 124 ]]; then
 		echo '  ! timed out'

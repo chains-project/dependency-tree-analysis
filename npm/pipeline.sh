@@ -57,7 +57,7 @@ while IFS= read -r package; do
 
   echo "Evaluating '${package}' ..."
 	npm init -y >/dev/null 2>&1
-	if ! timeout 30s npm install "${package}" --ignore-scripts=false --allow-git=none --audit=false --save-exact >/dev/null 2>&1; then
+	if ! timeout 300s npm install "${package}" --ignore-scripts=false --allow-git=none --audit=false --save-exact >/dev/null 2>&1; then
 		echo '  ! package not resolved'
 		cd ..
 		continue
